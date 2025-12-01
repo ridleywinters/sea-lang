@@ -201,6 +201,8 @@ impl Parser {
                 }
                 Ok(Statement::Return(expr))
             }
+            TokenKind::If => self.parse_if_statement(),
+            TokenKind::For => self.parse_for_statement(),
             TokenKind::Identifier(_) => self.try_parse_variable_decl_or_expression(),
             _ => {
                 let expr = self.parse_expression()?;
@@ -210,6 +212,97 @@ impl Parser {
                 Ok(Statement::Expression(expr))
             }
         }
+    }
+
+    fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::If)?;
+
+        let condition = self.parse_expression()?;
+
+        self.expect(TokenKind::LeftBrace)?;
+        let then_block = self.parse_block()?;
+        self.expect(TokenKind::RightBrace)?;
+
+        let else_block = if self.current().kind == TokenKind::Else {
+            self.advance();
+            self.expect(TokenKind::LeftBrace)?;
+            let block = self.parse_block()?;
+            self.expect(TokenKind::RightBrace)?;
+            Some(block)
+        } else {
+            None
+        };
+
+        Ok(Statement::If {
+            condition,
+            then_block,
+            else_block,
+        })
+    }
+
+    fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::For)?;
+
+        let init = self.parse_for_init()?;
+        self.expect(TokenKind::Semicolon)?;
+
+        let condition = self.parse_expression()?;
+        self.expect(TokenKind::Semicolon)?;
+
+        let update = self.parse_for_update()?;
+
+        self.expect(TokenKind::LeftBrace)?;
+        let body = self.parse_block()?;
+        self.expect(TokenKind::RightBrace)?;
+
+        Ok(Statement::For {
+            init: Box::new(init),
+            condition,
+            update: Box::new(update),
+            body,
+        })
+    }
+
+    fn parse_for_init(&mut self) -> Result<Statement, ParseError> {
+        let name = match &self.current().kind {
+            TokenKind::Identifier(name) => name.clone(),
+            _ => return Err(self.error("Expected identifier in for loop init".to_string())),
+        };
+        self.advance();
+
+        self.expect(TokenKind::ColonEq)?;
+        let initializer = self.parse_expression()?;
+
+        Ok(Statement::Assignment {
+            name,
+            op: AssignOp::Assign,
+            value: initializer,
+        })
+    }
+
+    fn parse_for_update(&mut self) -> Result<Statement, ParseError> {
+        let name = match &self.current().kind {
+            TokenKind::Identifier(name) => name.clone(),
+            _ => return Err(self.error("Expected identifier in for loop update".to_string())),
+        };
+        self.advance();
+
+        let op = match &self.current().kind {
+            TokenKind::PlusEq => AssignOp::AddAssign,
+            TokenKind::MinusEq => AssignOp::SubAssign,
+            TokenKind::StarEq => AssignOp::MulAssign,
+            TokenKind::SlashEq => AssignOp::DivAssign,
+            _ => {
+                return Err(
+                    self.error("Expected assignment operator in for loop update".to_string())
+                );
+            }
+        };
+        self.advance();
+
+        let value = self.parse_expression()?;
+
+        Ok(Statement::Assignment { name, op, value })
     }
 
     fn try_parse_variable_decl_or_expression(&mut self) -> Result<Statement, ParseError> {
@@ -231,6 +324,23 @@ impl Parser {
                 type_expr,
                 initializer,
             });
+        }
+
+        let assign_op = match &self.current().kind {
+            TokenKind::PlusEq => Some(AssignOp::AddAssign),
+            TokenKind::MinusEq => Some(AssignOp::SubAssign),
+            TokenKind::StarEq => Some(AssignOp::MulAssign),
+            TokenKind::SlashEq => Some(AssignOp::DivAssign),
+            _ => None,
+        };
+
+        if let Some(op) = assign_op {
+            self.advance();
+            let value = self.parse_expression()?;
+            if self.current().kind == TokenKind::Semicolon {
+                self.advance();
+            }
+            return Ok(Statement::Assignment { name, op, value });
         }
 
         let mut expr = Expr::Identifier(name);
@@ -580,30 +690,72 @@ mod tests {
     }
 
     #[test]
-    fn test_double_negative() {
+    fn test_double_negative_fails() {
         let source = "function main() { return --42 }";
+        let err = parse_source(source).expect_err("Double negative should not parse");
+        assert!(
+            err.message.contains("Unexpected token"),
+            "Expected 'Unexpected token' error, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn test_if_statement() {
+        let source = "function main() { if x < 0 { return -x } }";
         let functions = parse_source(source).expect("Should parse successfully");
 
         assert_eq!(functions.len(), 1);
         let stmt = &functions[0].body.statements[0];
         match stmt {
-            Statement::Return(Some(expr)) => match expr {
-                Expr::UnaryOp { op, operand } => {
-                    assert!(matches!(op, UnaryOperator::Neg));
-                    match operand.as_ref() {
-                        Expr::UnaryOp { op, operand } => {
-                            assert!(matches!(op, UnaryOperator::Neg));
-                            match operand.as_ref() {
-                                Expr::Literal(Literal::Integer(s)) => assert_eq!(s, "42"),
-                                _ => panic!("Expected integer literal"),
-                            }
-                        }
-                        _ => panic!("Expected nested unary op"),
+            Statement::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                assert!(matches!(
+                    condition,
+                    Expr::BinaryOp {
+                        op: BinaryOperator::Lt,
+                        ..
                     }
-                }
-                _ => panic!("Expected unary op"),
-            },
-            _ => panic!("Expected return statement"),
+                ));
+                assert_eq!(then_block.statements.len(), 1);
+                assert!(matches!(
+                    &then_block.statements[0],
+                    Statement::Return(Some(_))
+                ));
+                assert!(else_block.is_none());
+            }
+            _ => panic!("Expected if statement"),
+        }
+    }
+
+    #[test]
+    fn test_if_else_statement() {
+        let source = "function main() { if x < 0 { return -x } else { return x } }";
+        let functions = parse_source(source).expect("Should parse successfully");
+
+        assert_eq!(functions.len(), 1);
+        let stmt = &functions[0].body.statements[0];
+        match stmt {
+            Statement::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                assert!(matches!(
+                    condition,
+                    Expr::BinaryOp {
+                        op: BinaryOperator::Lt,
+                        ..
+                    }
+                ));
+                assert_eq!(then_block.statements.len(), 1);
+                assert!(else_block.is_some());
+                assert_eq!(else_block.as_ref().unwrap().statements.len(), 1);
+            }
+            _ => panic!("Expected if statement"),
         }
     }
 }

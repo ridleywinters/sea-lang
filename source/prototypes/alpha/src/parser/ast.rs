@@ -57,8 +57,33 @@ pub enum Statement {
         type_expr: TypeExpr,
         initializer: Expr,
     },
+    Assignment {
+        name: String,
+        op: AssignOp,
+        value: Expr,
+    },
     Expression(Expr),
     Return(Option<Expr>),
+    If {
+        condition: Expr,
+        then_block: Block,
+        else_block: Option<Block>,
+    },
+    For {
+        init: Box<Statement>,
+        condition: Expr,
+        update: Box<Statement>,
+        body: Block,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum AssignOp {
+    Assign,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
 }
 
 #[derive(Debug, Clone)]

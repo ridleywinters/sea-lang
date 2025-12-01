@@ -8,6 +8,7 @@ This is the **alpha** prototype for the Sea programming language compiler.
 
 - Avoid comments that state the obvious. Only add comments that explain architectural decisions, non-trivial algorithms, performance trade-offs, or non-obvious aspects of the code.
 - Prefer "early return" patterns to reduce nesting and improve readability.
+- Write helper functions for unit tests to consolidate common code in the tests.
 
 ## Rust-specific Code Style Guidelines
 

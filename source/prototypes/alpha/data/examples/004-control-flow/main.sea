@@ -2,10 +2,48 @@ function add(a i32, b i32) i32 {
     return a + b
 }
 
-function main() {
+function sub(a i32, b i32) i32 {
+    return a - b
+}
+
+function abs(a i32) i32 {
+    if a < 0 {
+        return -a
+    }
+    return a
+}
+
+function mul(a i32, b i32) i32 {
+    count i32 := abs(b)
+    sum i32 := 0
+    for i := 0; i < count; i += 1 {
+        sum += a
+    }
+    if b < 0 {
+        sum *= -1
+    }
+    return sum
+}
+
+export function main() {
     x i32 := 2
     y i32 := 3
     expect_eq(add(x, y), 5)
-
     expect_eq(add(2, 3), 5)
+
+    expect_eq(sub(3, 2), 1)
+    expect_ne(sub(3, 2), 2)
+
+    a i32 := -3
+    expect_eq(abs(a), 3)
+
+    expect_eq(mul(x, y), 6)
+    expect_eq(mul(x, a), -6)
+    expect_eq(x * a, -6)
+
+    for j := 0; j < 32; j += 1 {
+        for k := 0; k < 32; k += 1 {
+            expect_eq(mul(j, k), j * k)
+        }
+    }
 }

@@ -5,6 +5,9 @@ pub enum TokenKind {
     Export,
     Function,
     Return,
+    If,
+    Else,
+    For,
     True,
     False,
 
@@ -24,9 +27,15 @@ pub enum TokenKind {
     Arrow,
 
     Plus,
+    PlusPlus,
+    PlusEq,
     Minus,
+    MinusMinus,
+    MinusEq,
     Star,
+    StarEq,
     Slash,
+    SlashEq,
     Eq,
     EqEq,
     Ne,
@@ -161,21 +170,45 @@ impl Lexer {
             }
             '+' => {
                 self.advance();
-                self.make_token(TokenKind::Plus, start_line, start_column)
+                if self.current() == Some('+') {
+                    self.advance();
+                    self.make_token(TokenKind::PlusPlus, start_line, start_column)
+                } else if self.current() == Some('=') {
+                    self.advance();
+                    self.make_token(TokenKind::PlusEq, start_line, start_column)
+                } else {
+                    self.make_token(TokenKind::Plus, start_line, start_column)
+                }
             }
             '*' => {
                 self.advance();
-                self.make_token(TokenKind::Star, start_line, start_column)
+                if self.current() == Some('=') {
+                    self.advance();
+                    self.make_token(TokenKind::StarEq, start_line, start_column)
+                } else {
+                    self.make_token(TokenKind::Star, start_line, start_column)
+                }
             }
             '/' => {
                 self.advance();
-                self.make_token(TokenKind::Slash, start_line, start_column)
+                if self.current() == Some('=') {
+                    self.advance();
+                    self.make_token(TokenKind::SlashEq, start_line, start_column)
+                } else {
+                    self.make_token(TokenKind::Slash, start_line, start_column)
+                }
             }
             '-' => {
                 self.advance();
                 if self.current() == Some('>') {
                     self.advance();
                     self.make_token(TokenKind::Arrow, start_line, start_column)
+                } else if self.current() == Some('-') {
+                    self.advance();
+                    self.make_token(TokenKind::MinusMinus, start_line, start_column)
+                } else if self.current() == Some('=') {
+                    self.advance();
+                    self.make_token(TokenKind::MinusEq, start_line, start_column)
                 } else {
                     self.make_token(TokenKind::Minus, start_line, start_column)
                 }
@@ -366,6 +399,9 @@ impl Lexer {
             "export" => TokenKind::Export,
             "function" => TokenKind::Function,
             "return" => TokenKind::Return,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "for" => TokenKind::For,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             _ => TokenKind::Identifier(value),
