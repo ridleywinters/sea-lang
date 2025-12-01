@@ -1,0 +1,9 @@
+export function main() {
+    x i32 := 4 + 3 * 2
+    println("Hello, world!")
+    println(x)
+
+    // Test that the i8 overflows
+    y i8 := 100 + 50
+    println(y)
+}
