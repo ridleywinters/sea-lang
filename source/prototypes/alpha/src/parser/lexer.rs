@@ -9,8 +9,8 @@ pub enum TokenKind {
     False,
 
     Identifier(String),
-    IntegerLiteral(i64),
-    FloatLiteral(f64),
+    IntegerLiteral(String),
+    FloatLiteral(String),
     StringLiteral(String),
 
     LeftParen,
@@ -332,21 +332,21 @@ impl Lexer {
         }
 
         if is_float {
-            let f: f64 = value.parse().map_err(|_| LexError {
+            let _: f64 = value.parse().map_err(|_| LexError {
                 message: format!("Invalid float literal: {}", value),
                 file: self.file.clone(),
                 line: start_line,
                 column: start_column,
             })?;
-            Ok(self.make_token(TokenKind::FloatLiteral(f), start_line, start_column))
+            Ok(self.make_token(TokenKind::FloatLiteral(value), start_line, start_column))
         } else {
-            let i: i64 = value.parse().map_err(|_| LexError {
-                message: format!("Invalid integer literal: {}", value),
+            let _: i128 = value.parse().map_err(|_| LexError {
+                message: format!("Integer literal too large: {}", value),
                 file: self.file.clone(),
                 line: start_line,
                 column: start_column,
             })?;
-            Ok(self.make_token(TokenKind::IntegerLiteral(i), start_line, start_column))
+            Ok(self.make_token(TokenKind::IntegerLiteral(value), start_line, start_column))
         }
     }
 

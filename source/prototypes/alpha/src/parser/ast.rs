@@ -74,12 +74,16 @@ pub enum Expr {
         op: BinaryOperator,
         right: Box<Expr>,
     },
+    UnaryOp {
+        op: UnaryOperator,
+        operand: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Integer(i64),
-    Float(f64),
+    Integer(String),
+    Decimal(String),
     String(String),
     Bool(bool),
 }
@@ -99,6 +103,11 @@ pub enum BinaryOperator {
 }
 
 #[derive(Debug, Clone)]
+pub enum UnaryOperator {
+    Neg,
+}
+
+#[derive(Debug, Clone)]
 pub struct SourceLocation {
     pub file: PathBuf,
     pub line: usize,
@@ -109,20 +118,47 @@ pub struct SourceLocation {
 pub struct ParseError {
     pub message: String,
     pub location: Option<SourceLocation>,
+    pub file: Option<PathBuf>,
+    pub source_line: Option<String>,
+    pub suggestion: Option<String>,
 }
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.location {
-            Some(loc) => write!(
-                f,
-                "{}:{}:{}: {}",
-                loc.file.display(),
-                loc.line,
-                loc.column,
-                self.message
-            ),
-            None => write!(f, "{}", self.message),
+            Some(loc) => {
+                writeln!(f, "error: {}", self.message)?;
+                writeln!(
+                    f,
+                    "  --> {}:{}:{}",
+                    loc.file.display(),
+                    loc.line,
+                    loc.column
+                )?;
+                if let Some(source_line) = &self.source_line {
+                    let line_num = loc.line.to_string();
+                    let padding = " ".repeat(line_num.len());
+                    writeln!(f, "   {} |", padding)?;
+                    writeln!(f, "   {} | {}", line_num, source_line)?;
+                    writeln!(
+                        f,
+                        "   {} | {}^",
+                        padding,
+                        " ".repeat(loc.column.saturating_sub(1))
+                    )?;
+                }
+                if let Some(suggestion) = &self.suggestion {
+                    writeln!(f, "   help: {}", suggestion)?;
+                }
+                Ok(())
+            }
+            None => {
+                if let Some(file) = &self.file {
+                    write!(f, "error[{}]: {}", file.display(), self.message)
+                } else {
+                    write!(f, "error: {}", self.message)
+                }
+            }
         }
     }
 }

@@ -3,7 +3,17 @@ export function main() {
     println("Hello, world!")
     println(x)
 
-    // Test that the i8 overflows
-    y i8 := 100 + 50
+    // Test i8 range, which causes overflow
+    y0 i8 := 100
+    y1 i8 := 50
+    y i8 := y0 + y1
+    expect_eq(y, -106)
     println(y)
+
+    a i16 := 10 + 8
+    b i16 := 6 + 12
+    expect_eq(a, b)
+    
+    c i8 := 10 + 8
+    expect_ne(a, c)
 }

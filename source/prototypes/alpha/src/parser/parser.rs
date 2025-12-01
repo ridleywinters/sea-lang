@@ -7,14 +7,16 @@ pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     file: PathBuf,
+    source_lines: Vec<String>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>, file: PathBuf) -> Self {
+    pub fn new(tokens: Vec<Token>, file: PathBuf, source: &str) -> Self {
         Parser {
             tokens,
             pos: 0,
             file,
+            source_lines: source.lines().map(String::from).collect(),
         }
     }
 
@@ -42,6 +44,7 @@ impl Parser {
 
     fn error(&self, message: String) -> ParseError {
         let token = self.current();
+        let source_line = self.source_lines.get(token.line.saturating_sub(1)).cloned();
         ParseError {
             message,
             location: Some(SourceLocation {
@@ -49,7 +52,16 @@ impl Parser {
                 line: token.line,
                 column: token.column,
             }),
+            file: Some(self.file.clone()),
+            source_line,
+            suggestion: None,
         }
+    }
+
+    fn error_with_suggestion(&self, message: String, suggestion: String) -> ParseError {
+        let mut err = self.error(message);
+        err.suggestion = Some(suggestion);
+        err
     }
 
     pub fn parse_file(&mut self) -> Result<(FileAST, Vec<FunctionDef>), ParseError> {
@@ -68,6 +80,7 @@ impl Parser {
     }
 
     fn parse_function(&mut self) -> Result<FunctionDef, ParseError> {
+        // <export?> function <name> ( <params> ) <return_type?> { <body> }
         let is_exported = if self.current().kind == TokenKind::Export {
             self.advance();
             true
@@ -113,6 +126,9 @@ impl Parser {
         })
     }
 
+    /// Parses a parameter list.
+    ///
+    /// Grammar: `<param> ( , <param> )*` where `<param>` is `<name> <type>`
     fn parse_parameter_list(&mut self) -> Result<Vec<Parameter>, ParseError> {
         let mut params = Vec::new();
 
@@ -127,7 +143,13 @@ impl Parser {
             };
             self.advance();
 
-            self.expect(TokenKind::Colon)?;
+            if self.current().kind == TokenKind::Colon {
+                return Err(self.error_with_suggestion(
+                    "Unexpected ':' between parameter name and type".to_string(),
+                    "remove the colon; use 'name type' format instead of 'name: type'".to_string(),
+                ));
+            }
+
             let type_expr = self.parse_type_expr()?;
 
             params.push(Parameter { name, type_expr });
@@ -372,7 +394,7 @@ impl Parser {
     }
 
     fn parse_call(&mut self) -> Result<Expr, ParseError> {
-        let mut expr = self.parse_primary()?;
+        let mut expr = self.parse_unary()?;
 
         while self.current().kind == TokenKind::LeftParen {
             self.advance();
@@ -385,6 +407,18 @@ impl Parser {
         }
 
         Ok(expr)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
+        if self.current().kind == TokenKind::Minus {
+            self.advance();
+            let operand = self.parse_unary()?;
+            return Ok(Expr::UnaryOp {
+                op: UnaryOperator::Neg,
+                operand: Box::new(operand),
+            });
+        }
+        self.parse_primary()
     }
 
     fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError> {
@@ -407,15 +441,15 @@ impl Parser {
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         match &self.current().kind {
-            TokenKind::IntegerLiteral(n) => {
-                let n = *n;
+            TokenKind::IntegerLiteral(s) => {
+                let s = s.clone();
                 self.advance();
-                Ok(Expr::Literal(Literal::Integer(n)))
+                Ok(Expr::Literal(Literal::Integer(s)))
             }
-            TokenKind::FloatLiteral(f) => {
-                let f = *f;
+            TokenKind::FloatLiteral(s) => {
+                let s = s.clone();
                 self.advance();
-                Ok(Expr::Literal(Literal::Float(f)))
+                Ok(Expr::Literal(Literal::Decimal(s)))
             }
             TokenKind::StringLiteral(s) => {
                 let s = s.clone();
@@ -442,6 +476,134 @@ impl Parser {
                 Ok(expr)
             }
             _ => Err(self.error(format!("Unexpected token: {:?}", self.current().kind))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::lexer::Lexer;
+
+    fn parse_source(source: &str) -> Result<Vec<FunctionDef>, ParseError> {
+        let mut lexer = Lexer::new(source, PathBuf::from("test.sea"));
+        let tokens = lexer.tokenize_all().unwrap();
+        let mut parser = Parser::new(tokens, PathBuf::from("test.sea"), source);
+        let (_, functions) = parser.parse_file()?;
+        Ok(functions)
+    }
+
+    #[test]
+    fn test_parameter_without_colon() {
+        let source = "function add(a i32, b i32) i32 { return a + b }";
+        let functions = parse_source(source).expect("Should parse successfully");
+
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "add");
+        assert_eq!(functions[0].params.len(), 2);
+        assert_eq!(functions[0].params[0].name, "a");
+        assert_eq!(functions[0].params[1].name, "b");
+    }
+
+    #[test]
+    fn test_parameter_with_colon_error() {
+        let source = "function add(a: i32) { }";
+        let err = parse_source(source).expect_err("Should fail with colon error");
+
+        assert!(err.message.contains("Unexpected ':'"));
+        assert!(err.suggestion.is_some());
+        assert!(err.suggestion.unwrap().contains("remove the colon"));
+    }
+
+    #[test]
+    fn test_empty_parameter_list() {
+        let source = "function main() { }";
+        let functions = parse_source(source).expect("Should parse successfully");
+
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "main");
+        assert!(functions[0].params.is_empty());
+    }
+
+    #[test]
+    fn test_negative_integer_literal() {
+        let source = "function main() { return -106 }";
+        let functions = parse_source(source).expect("Should parse successfully");
+
+        assert_eq!(functions.len(), 1);
+        let stmt = &functions[0].body.statements[0];
+        match stmt {
+            Statement::Return(Some(expr)) => match expr {
+                Expr::UnaryOp { op, operand } => {
+                    assert!(matches!(op, UnaryOperator::Neg));
+                    match operand.as_ref() {
+                        Expr::Literal(Literal::Integer(s)) => assert_eq!(s, "106"),
+                        _ => panic!("Expected integer literal"),
+                    }
+                }
+                _ => panic!("Expected unary op"),
+            },
+            _ => panic!("Expected return statement"),
+        }
+    }
+
+    #[test]
+    fn test_negative_in_expression() {
+        let source = "function main() { return 10 + -5 }";
+        let functions = parse_source(source).expect("Should parse successfully");
+
+        assert_eq!(functions.len(), 1);
+        let stmt = &functions[0].body.statements[0];
+        match stmt {
+            Statement::Return(Some(expr)) => match expr {
+                Expr::BinaryOp { left, op, right } => {
+                    match left.as_ref() {
+                        Expr::Literal(Literal::Integer(s)) => assert_eq!(s, "10"),
+                        _ => panic!("Expected integer literal on left"),
+                    }
+                    assert!(matches!(op, BinaryOperator::Add));
+                    match right.as_ref() {
+                        Expr::UnaryOp { op, operand } => {
+                            assert!(matches!(op, UnaryOperator::Neg));
+                            match operand.as_ref() {
+                                Expr::Literal(Literal::Integer(s)) => assert_eq!(s, "5"),
+                                _ => panic!("Expected integer literal"),
+                            }
+                        }
+                        _ => panic!("Expected unary op on right"),
+                    }
+                }
+                _ => panic!("Expected binary op"),
+            },
+            _ => panic!("Expected return statement"),
+        }
+    }
+
+    #[test]
+    fn test_double_negative() {
+        let source = "function main() { return --42 }";
+        let functions = parse_source(source).expect("Should parse successfully");
+
+        assert_eq!(functions.len(), 1);
+        let stmt = &functions[0].body.statements[0];
+        match stmt {
+            Statement::Return(Some(expr)) => match expr {
+                Expr::UnaryOp { op, operand } => {
+                    assert!(matches!(op, UnaryOperator::Neg));
+                    match operand.as_ref() {
+                        Expr::UnaryOp { op, operand } => {
+                            assert!(matches!(op, UnaryOperator::Neg));
+                            match operand.as_ref() {
+                                Expr::Literal(Literal::Integer(s)) => assert_eq!(s, "42"),
+                                _ => panic!("Expected integer literal"),
+                            }
+                        }
+                        _ => panic!("Expected nested unary op"),
+                    }
+                }
+                _ => panic!("Expected unary op"),
+            },
+            _ => panic!("Expected return statement"),
         }
     }
 }
