@@ -1,2 +1,3 @@
-# sea-lang
-toy programming language
+# 🌊 sea-lang
+
+
