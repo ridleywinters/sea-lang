@@ -11,6 +11,331 @@ use crate::parser::{
 use super::builtins;
 use super::value::{RuntimeError, Value};
 
+trait WrappingOps: Sized + Copy + PartialEq + PartialOrd + std::fmt::Display {
+    fn wrapping_add(self, rhs: Self) -> Self;
+    fn wrapping_sub(self, rhs: Self) -> Self;
+    fn wrapping_mul(self, rhs: Self) -> Self;
+    fn wrapping_div(self, rhs: Self) -> Self;
+    fn is_zero(&self) -> bool;
+}
+
+trait CheckedOps: Sized + Copy + PartialEq + PartialOrd + std::fmt::Display {
+    fn checked_add(self, rhs: Self) -> Option<Self>;
+    fn checked_sub(self, rhs: Self) -> Option<Self>;
+    fn checked_mul(self, rhs: Self) -> Option<Self>;
+    fn checked_div(self, rhs: Self) -> Option<Self>;
+    fn is_zero(&self) -> bool;
+}
+
+trait FloatOps: Sized + Copy + PartialEq + PartialOrd {
+    fn add(self, rhs: Self) -> Self;
+    fn sub(self, rhs: Self) -> Self;
+    fn mul(self, rhs: Self) -> Self;
+    fn div(self, rhs: Self) -> Self;
+}
+
+fn apply_wrapping_int_op<T: WrappingOps>(
+    op: &BinaryOperator,
+    a: T,
+    b: T,
+    wrap: fn(T) -> Value,
+) -> Result<Value, RuntimeError> {
+    Ok(match op {
+        BinaryOperator::Add => wrap(a.wrapping_add(b)),
+        BinaryOperator::Sub => wrap(a.wrapping_sub(b)),
+        BinaryOperator::Mul => wrap(a.wrapping_mul(b)),
+        BinaryOperator::Div => {
+            if b.is_zero() {
+                return Err(RuntimeError {
+                    message: "Division by zero".to_string(),
+                });
+            }
+            wrap(a.wrapping_div(b))
+        }
+        BinaryOperator::Eq => Value::Bool(a == b),
+        BinaryOperator::Ne => Value::Bool(a != b),
+        BinaryOperator::Lt => Value::Bool(a < b),
+        BinaryOperator::Gt => Value::Bool(a > b),
+        BinaryOperator::Le => Value::Bool(a <= b),
+        BinaryOperator::Ge => Value::Bool(a >= b),
+    })
+}
+
+fn apply_checked_int_op<T: CheckedOps>(
+    op: &BinaryOperator,
+    a: T,
+    b: T,
+    wrap: fn(T) -> Value,
+) -> Result<Value, RuntimeError> {
+    match op {
+        BinaryOperator::Add => {
+            let result = a.checked_add(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} + {}", a, b),
+            })?;
+            Ok(wrap(result))
+        }
+        BinaryOperator::Sub => {
+            let result = a.checked_sub(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} - {}", a, b),
+            })?;
+            Ok(wrap(result))
+        }
+        BinaryOperator::Mul => {
+            let result = a.checked_mul(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} * {}", a, b),
+            })?;
+            Ok(wrap(result))
+        }
+        BinaryOperator::Div => {
+            if b.is_zero() {
+                return Err(RuntimeError {
+                    message: "Division by zero".to_string(),
+                });
+            }
+            let result = a.checked_div(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} / {}", a, b),
+            })?;
+            Ok(wrap(result))
+        }
+        BinaryOperator::Eq => Ok(Value::Bool(a == b)),
+        BinaryOperator::Ne => Ok(Value::Bool(a != b)),
+        BinaryOperator::Lt => Ok(Value::Bool(a < b)),
+        BinaryOperator::Gt => Ok(Value::Bool(a > b)),
+        BinaryOperator::Le => Ok(Value::Bool(a <= b)),
+        BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
+    }
+}
+
+fn apply_float_op<T: FloatOps>(
+    op: &BinaryOperator,
+    a: T,
+    b: T,
+    wrap: fn(T) -> Value,
+) -> Result<Value, RuntimeError> {
+    Ok(match op {
+        BinaryOperator::Add => wrap(a.add(b)),
+        BinaryOperator::Sub => wrap(a.sub(b)),
+        BinaryOperator::Mul => wrap(a.mul(b)),
+        BinaryOperator::Div => wrap(a.div(b)),
+        BinaryOperator::Eq => Value::Bool(a == b),
+        BinaryOperator::Ne => Value::Bool(a != b),
+        BinaryOperator::Lt => Value::Bool(a < b),
+        BinaryOperator::Gt => Value::Bool(a > b),
+        BinaryOperator::Le => Value::Bool(a <= b),
+        BinaryOperator::Ge => Value::Bool(a >= b),
+    })
+}
+
+impl WrappingOps for i8 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for i16 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for i32 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for i64 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for u8 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for u16 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for u32 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl WrappingOps for u64 {
+    fn wrapping_add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
+    fn wrapping_mul(self, rhs: Self) -> Self {
+        self.wrapping_mul(rhs)
+    }
+    fn wrapping_div(self, rhs: Self) -> Self {
+        self.wrapping_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl CheckedOps for i128 {
+    fn checked_add(self, rhs: Self) -> Option<Self> {
+        self.checked_add(rhs)
+    }
+    fn checked_sub(self, rhs: Self) -> Option<Self> {
+        self.checked_sub(rhs)
+    }
+    fn checked_mul(self, rhs: Self) -> Option<Self> {
+        self.checked_mul(rhs)
+    }
+    fn checked_div(self, rhs: Self) -> Option<Self> {
+        self.checked_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl CheckedOps for u128 {
+    fn checked_add(self, rhs: Self) -> Option<Self> {
+        self.checked_add(rhs)
+    }
+    fn checked_sub(self, rhs: Self) -> Option<Self> {
+        self.checked_sub(rhs)
+    }
+    fn checked_mul(self, rhs: Self) -> Option<Self> {
+        self.checked_mul(rhs)
+    }
+    fn checked_div(self, rhs: Self) -> Option<Self> {
+        self.checked_div(rhs)
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+}
+
+impl FloatOps for f32 {
+    fn add(self, rhs: Self) -> Self {
+        self + rhs
+    }
+    fn sub(self, rhs: Self) -> Self {
+        self - rhs
+    }
+    fn mul(self, rhs: Self) -> Self {
+        self * rhs
+    }
+    fn div(self, rhs: Self) -> Self {
+        self / rhs
+    }
+}
+
+impl FloatOps for f64 {
+    fn add(self, rhs: Self) -> Self {
+        self + rhs
+    }
+    fn sub(self, rhs: Self) -> Self {
+        self - rhs
+    }
+    fn mul(self, rhs: Self) -> Self {
+        self * rhs
+    }
+    fn div(self, rhs: Self) -> Self {
+        self / rhs
+    }
+}
+
 pub(super) enum OutputWriter {
     Stdout,
     Captured(Rc<RefCell<Vec<u8>>>),
@@ -128,7 +453,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn execute_block(&mut self, block: &Block) -> Result<Value, RuntimeError> {
-        let mut result = Value::Unit;
+        let mut result = Value::Void;
 
         for statement in &block.statements {
             match statement {
@@ -140,7 +465,7 @@ impl<'a> Interpreter<'a> {
                     let value = self.evaluate(initializer)?;
                     let value = self.convert_to_type(value, type_expr)?;
                     self.variables.insert(name.clone(), value);
-                    result = Value::Unit;
+                    result = Value::Void;
                 }
                 Statement::Assignment { name, op, value } => {
                     let new_value = self.evaluate(value)?;
@@ -150,11 +475,13 @@ impl<'a> Interpreter<'a> {
                         | AssignOp::SubAssign
                         | AssignOp::MulAssign
                         | AssignOp::DivAssign => {
-                            let current = self.variables.get(name).cloned().ok_or_else(|| {
-                                RuntimeError {
-                                    message: format!("Undefined variable: {}", name),
-                                }
-                            })?;
+                            let current =
+                                self.variables
+                                    .get(name)
+                                    .cloned()
+                                    .ok_or_else(|| RuntimeError {
+                                        message: format!("Undefined variable: {}", name),
+                                    })?;
                             let bin_op = match op {
                                 AssignOp::AddAssign => BinaryOperator::Add,
                                 AssignOp::SubAssign => BinaryOperator::Sub,
@@ -166,7 +493,7 @@ impl<'a> Interpreter<'a> {
                         }
                     };
                     self.variables.insert(name.clone(), final_value);
-                    result = Value::Unit;
+                    result = Value::Void;
                 }
                 Statement::Expression(expr) => {
                     result = self.evaluate(expr)?;
@@ -174,7 +501,7 @@ impl<'a> Interpreter<'a> {
                 Statement::Return(expr) => {
                     return match expr {
                         Some(e) => self.evaluate(e),
-                        None => Ok(Value::Unit),
+                        None => Ok(Value::Void),
                     };
                 }
                 Statement::If {
@@ -197,10 +524,7 @@ impl<'a> Interpreter<'a> {
 
                     if cond_bool {
                         let block_result = self.execute_block(then_block)?;
-                        if matches!(
-                            then_block.statements.last(),
-                            Some(Statement::Return(_))
-                        ) {
+                        if matches!(then_block.statements.last(), Some(Statement::Return(_))) {
                             return Ok(block_result);
                         }
                         result = block_result;
@@ -245,7 +569,7 @@ impl<'a> Interpreter<'a> {
 
                         self.execute_statement(update)?;
                     }
-                    result = Value::Unit;
+                    result = Value::Void;
                 }
             }
         }
@@ -356,8 +680,8 @@ impl<'a> Interpreter<'a> {
         }
 
         match (&left, &right) {
-            (Value::Integer(a), Value::Integer(b)) => self.apply_integer_literal_op(op, a, b),
-            (Value::Decimal(a), Value::Decimal(b)) => self.apply_decimal_literal_op(op, a, b),
+            (Value::Integer(a), Value::Integer(b)) => apply_integer_literal_op(op, a, b),
+            (Value::Decimal(a), Value::Decimal(b)) => apply_decimal_literal_op(op, a, b),
             (Value::Integer(_), typed) | (typed, Value::Integer(_)) => {
                 let int_val = if matches!(left, Value::Integer(_)) {
                     &left
@@ -406,18 +730,18 @@ impl<'a> Interpreter<'a> {
         right: Value,
     ) -> Result<Value, RuntimeError> {
         match (&left, &right) {
-            (Value::I8(a), Value::I8(b)) => self.apply_i8_op(op, *a, *b),
-            (Value::I16(a), Value::I16(b)) => self.apply_i16_op(op, *a, *b),
-            (Value::I32(a), Value::I32(b)) => self.apply_i32_op(op, *a, *b),
-            (Value::I64(a), Value::I64(b)) => self.apply_i64_op(op, *a, *b),
-            (Value::I128(a), Value::I128(b)) => self.apply_i128_op(op, *a, *b),
-            (Value::U8(a), Value::U8(b)) => self.apply_u8_op(op, *a, *b),
-            (Value::U16(a), Value::U16(b)) => self.apply_u16_op(op, *a, *b),
-            (Value::U32(a), Value::U32(b)) => self.apply_u32_op(op, *a, *b),
-            (Value::U64(a), Value::U64(b)) => self.apply_u64_op(op, *a, *b),
-            (Value::U128(a), Value::U128(b)) => self.apply_u128_op(op, *a, *b),
-            (Value::F32(a), Value::F32(b)) => self.apply_f32_op(op, *a, *b),
-            (Value::F64(a), Value::F64(b)) => self.apply_f64_op(op, *a, *b),
+            (Value::I8(a), Value::I8(b)) => apply_wrapping_int_op(op, *a, *b, Value::I8),
+            (Value::I16(a), Value::I16(b)) => apply_wrapping_int_op(op, *a, *b, Value::I16),
+            (Value::I32(a), Value::I32(b)) => apply_wrapping_int_op(op, *a, *b, Value::I32),
+            (Value::I64(a), Value::I64(b)) => apply_wrapping_int_op(op, *a, *b, Value::I64),
+            (Value::I128(a), Value::I128(b)) => apply_checked_int_op(op, *a, *b, Value::I128),
+            (Value::U8(a), Value::U8(b)) => apply_wrapping_int_op(op, *a, *b, Value::U8),
+            (Value::U16(a), Value::U16(b)) => apply_wrapping_int_op(op, *a, *b, Value::U16),
+            (Value::U32(a), Value::U32(b)) => apply_wrapping_int_op(op, *a, *b, Value::U32),
+            (Value::U64(a), Value::U64(b)) => apply_wrapping_int_op(op, *a, *b, Value::U64),
+            (Value::U128(a), Value::U128(b)) => apply_checked_int_op(op, *a, *b, Value::U128),
+            (Value::F32(a), Value::F32(b)) => apply_float_op(op, *a, *b, Value::F32),
+            (Value::F64(a), Value::F64(b)) => apply_float_op(op, *a, *b, Value::F64),
             (Value::String(a), Value::String(b)) => match op {
                 BinaryOperator::Add => Ok(Value::String(a.clone() + b)),
                 BinaryOperator::Eq => Ok(Value::Bool(a == b)),
@@ -438,370 +762,74 @@ impl<'a> Interpreter<'a> {
             }),
         }
     }
+}
 
-    fn apply_integer_literal_op(
-        &self,
-        op: &BinaryOperator,
-        a: &str,
-        b: &str,
-    ) -> Result<Value, RuntimeError> {
-        let a: i128 = a.parse().map_err(|_| RuntimeError {
-            message: format!("Cannot parse '{}' as integer", a),
-        })?;
-        let b: i128 = b.parse().map_err(|_| RuntimeError {
-            message: format!("Cannot parse '{}' as integer", b),
-        })?;
+fn apply_integer_literal_op(op: &BinaryOperator, a: &str, b: &str) -> Result<Value, RuntimeError> {
+    let a: i128 = a.parse().map_err(|_| RuntimeError {
+        message: format!("Cannot parse '{}' as integer", a),
+    })?;
+    let b: i128 = b.parse().map_err(|_| RuntimeError {
+        message: format!("Cannot parse '{}' as integer", b),
+    })?;
 
-        match op {
-            BinaryOperator::Add => {
-                let result = a.checked_add(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} + {}", a, b),
-                })?;
-                Ok(Value::Integer(result.to_string()))
-            }
-            BinaryOperator::Sub => {
-                let result = a.checked_sub(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} - {}", a, b),
-                })?;
-                Ok(Value::Integer(result.to_string()))
-            }
-            BinaryOperator::Mul => {
-                let result = a.checked_mul(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} * {}", a, b),
-                })?;
-                Ok(Value::Integer(result.to_string()))
-            }
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                let result = a.checked_div(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} / {}", a, b),
-                })?;
-                Ok(Value::Integer(result.to_string()))
-            }
-            BinaryOperator::Eq => Ok(Value::Bool(a == b)),
-            BinaryOperator::Ne => Ok(Value::Bool(a != b)),
-            BinaryOperator::Lt => Ok(Value::Bool(a < b)),
-            BinaryOperator::Gt => Ok(Value::Bool(a > b)),
-            BinaryOperator::Le => Ok(Value::Bool(a <= b)),
-            BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
+    match op {
+        BinaryOperator::Add => {
+            let result = a.checked_add(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} + {}", a, b),
+            })?;
+            Ok(Value::Integer(result.to_string()))
         }
-    }
-
-    fn apply_decimal_literal_op(
-        &self,
-        op: &BinaryOperator,
-        a: &str,
-        b: &str,
-    ) -> Result<Value, RuntimeError> {
-        let a: f64 = a.parse().map_err(|_| RuntimeError {
-            message: format!("Cannot parse '{}' as decimal", a),
-        })?;
-        let b: f64 = b.parse().map_err(|_| RuntimeError {
-            message: format!("Cannot parse '{}' as decimal", b),
-        })?;
-
-        match op {
-            BinaryOperator::Add => Ok(Value::Decimal((a + b).to_string())),
-            BinaryOperator::Sub => Ok(Value::Decimal((a - b).to_string())),
-            BinaryOperator::Mul => Ok(Value::Decimal((a * b).to_string())),
-            BinaryOperator::Div => Ok(Value::Decimal((a / b).to_string())),
-            BinaryOperator::Eq => Ok(Value::Bool(a == b)),
-            BinaryOperator::Ne => Ok(Value::Bool(a != b)),
-            BinaryOperator::Lt => Ok(Value::Bool(a < b)),
-            BinaryOperator::Gt => Ok(Value::Bool(a > b)),
-            BinaryOperator::Le => Ok(Value::Bool(a <= b)),
-            BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
+        BinaryOperator::Sub => {
+            let result = a.checked_sub(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} - {}", a, b),
+            })?;
+            Ok(Value::Integer(result.to_string()))
         }
-    }
-
-    fn apply_i128_op(&self, op: &BinaryOperator, a: i128, b: i128) -> Result<Value, RuntimeError> {
-        match op {
-            BinaryOperator::Add => {
-                let result = a.checked_add(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} + {}", a, b),
-                })?;
-                Ok(Value::I128(result))
-            }
-            BinaryOperator::Sub => {
-                let result = a.checked_sub(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} - {}", a, b),
-                })?;
-                Ok(Value::I128(result))
-            }
-            BinaryOperator::Mul => {
-                let result = a.checked_mul(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} * {}", a, b),
-                })?;
-                Ok(Value::I128(result))
-            }
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                let result = a.checked_div(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} / {}", a, b),
-                })?;
-                Ok(Value::I128(result))
-            }
-            BinaryOperator::Eq => Ok(Value::Bool(a == b)),
-            BinaryOperator::Ne => Ok(Value::Bool(a != b)),
-            BinaryOperator::Lt => Ok(Value::Bool(a < b)),
-            BinaryOperator::Gt => Ok(Value::Bool(a > b)),
-            BinaryOperator::Le => Ok(Value::Bool(a <= b)),
-            BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
+        BinaryOperator::Mul => {
+            let result = a.checked_mul(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} * {}", a, b),
+            })?;
+            Ok(Value::Integer(result.to_string()))
         }
-    }
-
-    fn apply_u128_op(&self, op: &BinaryOperator, a: u128, b: u128) -> Result<Value, RuntimeError> {
-        match op {
-            BinaryOperator::Add => {
-                let result = a.checked_add(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} + {}", a, b),
-                })?;
-                Ok(Value::U128(result))
+        BinaryOperator::Div => {
+            if b == 0 {
+                return Err(RuntimeError {
+                    message: "Division by zero".to_string(),
+                });
             }
-            BinaryOperator::Sub => {
-                let result = a.checked_sub(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} - {}", a, b),
-                })?;
-                Ok(Value::U128(result))
-            }
-            BinaryOperator::Mul => {
-                let result = a.checked_mul(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} * {}", a, b),
-                })?;
-                Ok(Value::U128(result))
-            }
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                let result = a.checked_div(b).ok_or_else(|| RuntimeError {
-                    message: format!("Integer overflow: {} / {}", a, b),
-                })?;
-                Ok(Value::U128(result))
-            }
-            BinaryOperator::Eq => Ok(Value::Bool(a == b)),
-            BinaryOperator::Ne => Ok(Value::Bool(a != b)),
-            BinaryOperator::Lt => Ok(Value::Bool(a < b)),
-            BinaryOperator::Gt => Ok(Value::Bool(a > b)),
-            BinaryOperator::Le => Ok(Value::Bool(a <= b)),
-            BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
+            let result = a.checked_div(b).ok_or_else(|| RuntimeError {
+                message: format!("Integer overflow: {} / {}", a, b),
+            })?;
+            Ok(Value::Integer(result.to_string()))
         }
+        BinaryOperator::Eq => Ok(Value::Bool(a == b)),
+        BinaryOperator::Ne => Ok(Value::Bool(a != b)),
+        BinaryOperator::Lt => Ok(Value::Bool(a < b)),
+        BinaryOperator::Gt => Ok(Value::Bool(a > b)),
+        BinaryOperator::Le => Ok(Value::Bool(a <= b)),
+        BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
     }
+}
 
-    fn apply_i8_op(&self, op: &BinaryOperator, a: i8, b: i8) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::I8(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::I8(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::I8(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::I8(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
+fn apply_decimal_literal_op(op: &BinaryOperator, a: &str, b: &str) -> Result<Value, RuntimeError> {
+    let a: f64 = a.parse().map_err(|_| RuntimeError {
+        message: format!("Cannot parse '{}' as decimal", a),
+    })?;
+    let b: f64 = b.parse().map_err(|_| RuntimeError {
+        message: format!("Cannot parse '{}' as decimal", b),
+    })?;
 
-    fn apply_i16_op(&self, op: &BinaryOperator, a: i16, b: i16) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::I16(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::I16(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::I16(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::I16(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_i32_op(&self, op: &BinaryOperator, a: i32, b: i32) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::I32(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::I32(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::I32(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::I32(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_i64_op(&self, op: &BinaryOperator, a: i64, b: i64) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::I64(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::I64(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::I64(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::I64(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_u8_op(&self, op: &BinaryOperator, a: u8, b: u8) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::U8(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::U8(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::U8(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::U8(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_u16_op(&self, op: &BinaryOperator, a: u16, b: u16) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::U16(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::U16(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::U16(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::U16(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_u32_op(&self, op: &BinaryOperator, a: u32, b: u32) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::U32(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::U32(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::U32(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::U32(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_u64_op(&self, op: &BinaryOperator, a: u64, b: u64) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::U64(a.wrapping_add(b)),
-            BinaryOperator::Sub => Value::U64(a.wrapping_sub(b)),
-            BinaryOperator::Mul => Value::U64(a.wrapping_mul(b)),
-            BinaryOperator::Div => {
-                if b == 0 {
-                    return Err(RuntimeError {
-                        message: "Division by zero".to_string(),
-                    });
-                }
-                Value::U64(a.wrapping_div(b))
-            }
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_f32_op(&self, op: &BinaryOperator, a: f32, b: f32) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::F32(a + b),
-            BinaryOperator::Sub => Value::F32(a - b),
-            BinaryOperator::Mul => Value::F32(a * b),
-            BinaryOperator::Div => Value::F32(a / b),
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
-    }
-
-    fn apply_f64_op(&self, op: &BinaryOperator, a: f64, b: f64) -> Result<Value, RuntimeError> {
-        Ok(match op {
-            BinaryOperator::Add => Value::F64(a + b),
-            BinaryOperator::Sub => Value::F64(a - b),
-            BinaryOperator::Mul => Value::F64(a * b),
-            BinaryOperator::Div => Value::F64(a / b),
-            BinaryOperator::Eq => Value::Bool(a == b),
-            BinaryOperator::Ne => Value::Bool(a != b),
-            BinaryOperator::Lt => Value::Bool(a < b),
-            BinaryOperator::Gt => Value::Bool(a > b),
-            BinaryOperator::Le => Value::Bool(a <= b),
-            BinaryOperator::Ge => Value::Bool(a >= b),
-        })
+    match op {
+        BinaryOperator::Add => Ok(Value::Decimal((a + b).to_string())),
+        BinaryOperator::Sub => Ok(Value::Decimal((a - b).to_string())),
+        BinaryOperator::Mul => Ok(Value::Decimal((a * b).to_string())),
+        BinaryOperator::Div => Ok(Value::Decimal((a / b).to_string())),
+        BinaryOperator::Eq => Ok(Value::Bool(a == b)),
+        BinaryOperator::Ne => Ok(Value::Bool(a != b)),
+        BinaryOperator::Lt => Ok(Value::Bool(a < b)),
+        BinaryOperator::Gt => Ok(Value::Bool(a > b)),
+        BinaryOperator::Le => Ok(Value::Bool(a <= b)),
+        BinaryOperator::Ge => Ok(Value::Bool(a >= b)),
     }
 }
 

@@ -1,13 +1,17 @@
 #![allow(unused)]
 
 use clap::{Parser, Subcommand, ValueEnum};
+use std::fs;
 use std::path::PathBuf;
 
+mod backend_c;
+mod backend_rust;
+mod backend_typescript;
 mod commands;
 mod interpreter;
 mod parser;
 
-use commands::{RunOptions, command_run};
+use commands::{Backend as BuildBackend, BuildOptions, RunOptions, command_build, command_run};
 
 #[derive(Parser)]
 #[command(name = "alpha")]
@@ -34,7 +38,14 @@ enum Backend {
 #[derive(Subcommand)]
 enum Command {
     Init,
-    Build,
+    Build {
+        /// Path to a file or folder to build
+        path: PathBuf,
+
+        /// Output file path (if not specified, prints to stdout)
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+    },
     Run {
         /// Path to a file or folder to run
         path: PathBuf,
@@ -63,9 +74,46 @@ fn main() {
             println!("Initializing project...");
             // TODO: Implement init
         }
-        Command::Build => {
-            println!("Building project...");
-            // TODO: Implement build
+        Command::Build { path, output } => {
+            let backend = match &cli.backend {
+                Some(Backend::Typescript) => BuildBackend::Typescript,
+                Some(Backend::Rust) => BuildBackend::Rust,
+                Some(Backend::C) => BuildBackend::C,
+                Some(Backend::Interpret) => {
+                    eprintln!("Error: 'interpret' is not a valid build backend");
+                    std::process::exit(1);
+                }
+                None => {
+                    eprintln!(
+                        "Error: No backend specified. Use --backend=<backend> to specify a target."
+                    );
+                    std::process::exit(1);
+                }
+            };
+            let options = BuildOptions {
+                backend,
+                verbose: cli.verbose,
+            };
+            match command_build(&path, options) {
+                Ok(result) => {
+                    if let Some(output_path) = output {
+                        if let Err(e) = fs::write(&output_path, &result.output) {
+                            eprintln!("Error writing output file: {}", e);
+                            std::process::exit(1);
+                        }
+                        println!("Build output written to {}", output_path.display());
+                    } else {
+                        print!("{}", result.output);
+                    }
+                }
+                Err(e) => {
+                    if let Some(output_path) = output {
+                        let _ = fs::remove_file(&output_path);
+                    }
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
         Command::Run { path } => {
             let options = RunOptions {

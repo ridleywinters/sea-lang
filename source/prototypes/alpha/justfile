@@ -41,3 +41,16 @@ dev: ensure
 #==============================================================================
 test: ensure
     cargo test
+    @just test-examples
+
+test-examples: ensure
+    @for dir in data/examples/*; do \
+        [ -d "$dir" ] || continue; \
+        echo "Building $dir (TypeScript)"; \
+        cargo run build --backend=typescript --output="$dir/main.ts" "$dir"; \
+        deno check "$dir/main.ts"; \
+        echo "Building $dir (C)"; \
+        cargo run build --backend=c --output="$dir/main.c" "$dir"; \
+        echo "Building $dir (Rust)"; \
+        cargo run build --backend=rust --output="$dir/main.rs" "$dir"; \
+    done

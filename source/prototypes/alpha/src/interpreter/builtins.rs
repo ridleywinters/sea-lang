@@ -20,7 +20,7 @@ fn builtin_println(args: Vec<Value>, output: &OutputWriter) -> Result<Value, Run
     } else {
         output.write_empty_line();
     }
-    Ok(Value::Unit)
+    Ok(Value::Void)
 }
 
 fn builtin_expect_eq(args: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -45,7 +45,7 @@ fn builtin_expect_eq(args: Vec<Value>) -> Result<Value, RuntimeError> {
             message: format!("expect_eq failed: {} != {}", left, right),
         });
     }
-    Ok(Value::Unit)
+    Ok(Value::Void)
 }
 
 fn builtin_expect_ne(args: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -61,5 +61,5 @@ fn builtin_expect_ne(args: Vec<Value>) -> Result<Value, RuntimeError> {
             message: format!("expect_ne failed: {} == {}", left, right),
         });
     }
-    Ok(Value::Unit)
+    Ok(Value::Void)
 }

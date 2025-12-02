@@ -14,9 +14,58 @@ pub enum Value {
     F64(f64),
     String(String),
     Bool(bool),
-    Unit,
+    Void,
     Integer(String),
     Decimal(String),
+}
+
+fn parse_integer_literal(s: &str) -> Result<i128, RuntimeError> {
+    s.parse().map_err(|_| RuntimeError {
+        message: format!("Cannot parse '{}' as integer", s),
+    })
+}
+
+fn convert_to_signed<T>(
+    s: &str,
+    type_name: &str,
+    min: i128,
+    max: i128,
+    wrap: fn(T) -> Value,
+) -> Result<Value, RuntimeError>
+where
+    T: TryFrom<i128>,
+{
+    let n = parse_integer_literal(s)?;
+    if n < min || n > max {
+        return Err(RuntimeError {
+            message: format!(
+                "Value {} does not fit in {} (range {} to {})",
+                n, type_name, min, max
+            ),
+        });
+    }
+    Ok(wrap(T::try_from(n).ok().unwrap()))
+}
+
+fn convert_to_unsigned<T>(
+    s: &str,
+    type_name: &str,
+    max: i128,
+    wrap: fn(T) -> Value,
+) -> Result<Value, RuntimeError>
+where
+    T: TryFrom<i128>,
+{
+    let n = parse_integer_literal(s)?;
+    if n < 0 || n > max {
+        return Err(RuntimeError {
+            message: format!(
+                "Value {} does not fit in {} (range 0 to {})",
+                n, type_name, max
+            ),
+        });
+    }
+    Ok(wrap(T::try_from(n).ok().unwrap()))
 }
 
 impl Value {
@@ -36,7 +85,7 @@ impl Value {
             Value::F64(_) => "f64",
             Value::String(_) => "string",
             Value::Bool(_) => "bool",
-            Value::Unit => "unit",
+            Value::Void => "unit",
             Value::Integer(_) => "integer",
             Value::Decimal(_) => "decimal",
         }
@@ -89,7 +138,7 @@ impl Value {
             (Value::F64(a), Value::F64(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Unit, Value::Unit) => true,
+            (Value::Void, Value::Void) => true,
             (Value::Integer(a), Value::Integer(b)) => a == b,
             (Value::Decimal(a), Value::Decimal(b)) => a == b,
             (Value::Integer(s), typed) => {
@@ -127,20 +176,7 @@ impl Value {
     pub fn to_i8(&self) -> Result<Value, RuntimeError> {
         match self {
             Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < i8::MIN as i128 || n > i8::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in i8 (range {} to {})",
-                            n,
-                            i8::MIN,
-                            i8::MAX
-                        ),
-                    });
-                }
-                Ok(Value::I8(n as i8))
+                convert_to_signed(s, "i8", i8::MIN as i128, i8::MAX as i128, Value::I8)
             }
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to i8", self.type_name()),
@@ -151,20 +187,7 @@ impl Value {
     pub fn to_i16(&self) -> Result<Value, RuntimeError> {
         match self {
             Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < i16::MIN as i128 || n > i16::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in i16 (range {} to {})",
-                            n,
-                            i16::MIN,
-                            i16::MAX
-                        ),
-                    });
-                }
-                Ok(Value::I16(n as i16))
+                convert_to_signed(s, "i16", i16::MIN as i128, i16::MAX as i128, Value::I16)
             }
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to i16", self.type_name()),
@@ -175,20 +198,7 @@ impl Value {
     pub fn to_i32(&self) -> Result<Value, RuntimeError> {
         match self {
             Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < i32::MIN as i128 || n > i32::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in i32 (range {} to {})",
-                            n,
-                            i32::MIN,
-                            i32::MAX
-                        ),
-                    });
-                }
-                Ok(Value::I32(n as i32))
+                convert_to_signed(s, "i32", i32::MIN as i128, i32::MAX as i128, Value::I32)
             }
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to i32", self.type_name()),
@@ -199,20 +209,7 @@ impl Value {
     pub fn to_i64(&self) -> Result<Value, RuntimeError> {
         match self {
             Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < i64::MIN as i128 || n > i64::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in i64 (range {} to {})",
-                            n,
-                            i64::MIN,
-                            i64::MAX
-                        ),
-                    });
-                }
-                Ok(Value::I64(n as i64))
+                convert_to_signed(s, "i64", i64::MIN as i128, i64::MAX as i128, Value::I64)
             }
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to i64", self.type_name()),
@@ -223,9 +220,7 @@ impl Value {
     pub fn to_i128(&self) -> Result<Value, RuntimeError> {
         match self {
             Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as i128", s),
-                })?;
+                let n = parse_integer_literal(s)?;
                 Ok(Value::I128(n))
             }
             _ => Err(RuntimeError {
@@ -236,17 +231,7 @@ impl Value {
 
     pub fn to_u8(&self) -> Result<Value, RuntimeError> {
         match self {
-            Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < 0 || n > u8::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!("Value {} does not fit in u8 (range 0 to {})", n, u8::MAX),
-                    });
-                }
-                Ok(Value::U8(n as u8))
-            }
+            Value::Integer(s) => convert_to_unsigned(s, "u8", u8::MAX as i128, Value::U8),
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to u8", self.type_name()),
             }),
@@ -255,21 +240,7 @@ impl Value {
 
     pub fn to_u16(&self) -> Result<Value, RuntimeError> {
         match self {
-            Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < 0 || n > u16::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in u16 (range 0 to {})",
-                            n,
-                            u16::MAX
-                        ),
-                    });
-                }
-                Ok(Value::U16(n as u16))
-            }
+            Value::Integer(s) => convert_to_unsigned(s, "u16", u16::MAX as i128, Value::U16),
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to u16", self.type_name()),
             }),
@@ -278,21 +249,7 @@ impl Value {
 
     pub fn to_u32(&self) -> Result<Value, RuntimeError> {
         match self {
-            Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < 0 || n > u32::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in u32 (range 0 to {})",
-                            n,
-                            u32::MAX
-                        ),
-                    });
-                }
-                Ok(Value::U32(n as u32))
-            }
+            Value::Integer(s) => convert_to_unsigned(s, "u32", u32::MAX as i128, Value::U32),
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to u32", self.type_name()),
             }),
@@ -301,21 +258,7 @@ impl Value {
 
     pub fn to_u64(&self) -> Result<Value, RuntimeError> {
         match self {
-            Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
-                if n < 0 || n > u64::MAX as i128 {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Value {} does not fit in u64 (range 0 to {})",
-                            n,
-                            u64::MAX
-                        ),
-                    });
-                }
-                Ok(Value::U64(n as u64))
-            }
+            Value::Integer(s) => convert_to_unsigned(s, "u64", u64::MAX as i128, Value::U64),
             _ => Err(RuntimeError {
                 message: format!("Cannot convert {} to u64", self.type_name()),
             }),
@@ -325,9 +268,7 @@ impl Value {
     pub fn to_u128(&self) -> Result<Value, RuntimeError> {
         match self {
             Value::Integer(s) => {
-                let n: i128 = s.parse().map_err(|_| RuntimeError {
-                    message: format!("Cannot parse '{}' as integer", s),
-                })?;
+                let n = parse_integer_literal(s)?;
                 if n < 0 {
                     return Err(RuntimeError {
                         message: format!("Value {} does not fit in u128 (must be non-negative)", n),
@@ -431,7 +372,7 @@ impl std::fmt::Display for Value {
             Value::F64(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "{}", s),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Unit => write!(f, "()"),
+            Value::Void => write!(f, "()"),
             Value::Integer(s) => write!(f, "{}", s),
             Value::Decimal(s) => write!(f, "{}", s),
         }
